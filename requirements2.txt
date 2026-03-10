@@ -1,0 +1,10 @@
+fastapi==0.135.1
+uvicorn==0.41.0
+sqlalchemy==2.0.48
+pydantic==2.12.5
+pydantic-settings==2.13.1
+pydantic[email]
+python-multipart==0.0.22
+pytest==9.0.2
+httpx==0.28.1
+
