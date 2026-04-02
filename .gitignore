@@ -1,0 +1,5 @@
+.ocrenv/
+.fastenv/
+*.pyc
+__pycache__/
+data

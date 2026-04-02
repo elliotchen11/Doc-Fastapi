@@ -11,7 +11,7 @@ source .ocrenv/bin/activate
 pip install -r requirements2.txt
 
 # Run the server
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Check API health
 http://localhost:8000/health
