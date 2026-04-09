@@ -9,11 +9,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
+from app.services.logger_service import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/exports", tags=["exports"])
 
-#DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
-BASE_DIR = Path(__file__).resolve().parent
-DATA_ROOT = BASE_DIR / "data" / "projects"
+DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
 
 # ---- Helpers ----
 
@@ -27,8 +29,10 @@ def find_run(run_id: str) -> tuple[Path, dict]:
             try:
                 record = json.loads(run_path.read_text(encoding="utf-8"))
             except Exception:
+                logger.exception("Failed to read run file: run_id=%s path=%s", run_id, run_path)
                 raise HTTPException(status_code=500, detail=f"Failed to read run file: {run_id}")
             return run_path, record
+    logger.warning("Run not found: run_id=%s", run_id)
     raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
 
 

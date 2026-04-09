@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.schemas.role import RoleCreate, RoleUpdate, RoleResponse
 from app.services.role_service import create_role, list_roles, get_role_by_id, update_role, delete_role
+from app.services.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -21,6 +24,7 @@ def post_role(data: RoleCreate, db: Session = Depends(get_db)):
 def get_role(id: int, db: Session = Depends(get_db)):
     role = get_role_by_id(db, id)
     if role is None:
+        logger.warning("Role not found: id=%s", id)
         raise HTTPException(status_code=404, detail="Role not found")
     return role
 
@@ -28,10 +32,12 @@ def get_role(id: int, db: Session = Depends(get_db)):
 def patch_role(id: int, data: RoleUpdate, db: Session = Depends(get_db)):
     role = get_role_by_id(db, id)
     if role is None:
+        logger.warning("Role not found for patch: id=%s", id)
         raise HTTPException(status_code=404, detail="Role not found")
     return update_role(db, role, data)
 
 @router.delete("/{id}", status_code=204)
-def delete_role(id: int, db: Session = Depends(get_db)):    
+def delete_role(id: int, db: Session = Depends(get_db)):
     if not delete_role(db, id):
+        logger.warning("Role not found for delete: id=%s", id)
         raise HTTPException(status_code=404, detail="Role not found")

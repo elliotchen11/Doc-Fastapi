@@ -11,16 +11,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.python.llm_extract_core import answer_questions_json, answer_questions_json_chunked
+from app.services.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
-#DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
-BASE_DIR = Path(__file__).resolve().parent
-DATA_ROOT = BASE_DIR / "data" / "projects"
+DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
 
 TOKEN_THRESHOLD = 25_000
 
-MODEL: str = "gpt-oss:20b"
+MODEL: str = "ministral-3"
 CONTEXT_NOTE: str = ""
 FORCE_CHUNKING: bool = False
 CHUNK_CHARS: int = 12_000
@@ -52,6 +53,7 @@ def read_json(path: Path, default):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        logger.exception("Failed to read JSON: %s", path)
         return default
 
 
@@ -63,6 +65,7 @@ def write_json(path: Path, obj) -> None:
 def get_project_root(project_id: str) -> Path:
     root = DATA_ROOT / project_id
     if not root.is_dir():
+        logger.warning("Project not found: project_id=%s", project_id)
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return root
 
@@ -75,11 +78,12 @@ def append_audit(audit_path: Path, entry: dict) -> None:
             if not isinstance(data, list):
                 data = []
         except Exception:
+            logger.exception("Failed to read audit.json: %s", audit_path)
             data = []
         data.append(entry)
         audit_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     except Exception:
-        pass
+        logger.exception("Failed to write audit.json: %s", audit_path)
 
 
 def estimate_tokens(text: str) -> int:
@@ -209,6 +213,7 @@ def run_extract(body: RunExtractRequest):
 
         missing = [fid for fid in body.file_ids if fid not in file_index]
         if missing:
+            logger.warning("run_extract — file IDs not found: project_id=%s missing=%s", body.project_id, missing)
             raise HTTPException(status_code=404, detail=f"File IDs not found in project: {missing}")
 
         standard: dict | None = body.standard.model_dump() if body.standard else None
@@ -223,6 +228,7 @@ def run_extract(body: RunExtractRequest):
                 if str(f.get("fieldName") or f.get("field") or "").strip()
             ]
         if not questions:
+            logger.warning("run_extract — no questions to extract: project_id=%s", body.project_id)
             raise HTTPException(status_code=400, detail="No questions to extract. Provide a standard with fields.")
 
         ctx_full = build_context_note(CONTEXT_NOTE, standard, structure_text)
@@ -288,6 +294,7 @@ def run_extract(body: RunExtractRequest):
                     overlap_chars=OVERLAP_CHARS,
                 )
             except Exception as e:
+                logger.exception("Extraction failed for project_id=%s file_id=%s: %s", body.project_id, fid, e)
                 append_audit(audit_path, {"ts": now_iso(), "action": "complete step_extraction", "project_id": body.project_id, "file_id": fid, "status": "failed", "error": str(e)})
                 run_record["outputs"][fid] = {q: {"value": None, "confidence": 0.0} for q in questions}
                 errors.append(f"{fid}: extraction failed — {e}")
@@ -346,6 +353,7 @@ def run_extract(body: RunExtractRequest):
         })
 
     except Exception as e:
+        logger.exception("run_extract failed for project_id=%s: %s", body.project_id, e)
         append_audit(audit_path, {
             "ts": now_iso(),
             "action": "run.save",

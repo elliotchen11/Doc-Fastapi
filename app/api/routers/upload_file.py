@@ -8,11 +8,13 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.services.logger_service import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-#DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
-BASE_DIR = Path(__file__).resolve().parent
-DATA_ROOT = BASE_DIR / "data" / "projects"
+DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
 
 
 # ---- Helpers ----
@@ -40,6 +42,7 @@ def read_json(path: Path, default):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        logger.exception("Failed to read JSON: %s", path)
         return default
 
 
@@ -58,10 +61,12 @@ async def upload_pdf(
 ):
     filename = file.filename or ""
     if not filename.lower().endswith(".pdf"):
+        logger.warning("Upload rejected — not a PDF: filename=%s project_id=%s", filename, project_id)
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
     project_root = DATA_ROOT / project_id
     if not project_root.is_dir():
+        logger.warning("Upload failed — project not found: project_id=%s", project_id)
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
     files_dir = project_root / "files"
