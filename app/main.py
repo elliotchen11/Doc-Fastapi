@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -8,6 +9,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 #from app.api.routers import convert_to_img, document_file, export, models, project, run_extract
 from app.api.routers import  project, upload_file, ocr, run_extraction, export
+from app.services.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 #DATA_ROOT = Path(__file__).resolve().parent / "data" / "projects"
 BASE_DIR = Path(__file__).resolve().parent
@@ -63,6 +67,31 @@ def _try_write_validation_audit(request: Request, error_detail: str) -> None:
 
 app = FastAPI()
 
+
+@app.on_event("startup")
+async def cleanup_stale_pending():
+    """Remove any .pending files left over from a previous crashed/restarted process."""
+    cleaned = 0
+    for f in DATA_ROOT.rglob("*.pending"):
+        try:
+            f.unlink()
+            cleaned += 1
+            logger.info("Cleaned stale pending file: %s", f)
+        except Exception:
+            logger.exception("Failed to clean pending file: %s", f)
+    if cleaned:
+        logger.info("Startup cleanup: removed %d stale .pending file(s)", cleaned)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    logger.info("→ %s %s", request.method, request.url.path)
+    response = await call_next(request)
+    elapsed = (time.perf_counter() - start) * 1000
+    logger.info("← %s %s %d (%.1fms)", request.method, request.url.path, response.status_code, elapsed)
+    return response
+
 @app.get("/health")
 async def health_check():
     return {"success": True, "message": "FASTAPI is running"}
@@ -70,12 +99,14 @@ async def health_check():
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     detail = str(exc.errors())
+    logger.warning("Validation error on %s %s: %s", request.method, request.url.path, detail)
     _try_write_validation_audit(request, detail)
     return JSONResponse(status_code=422, content={"success": False, "error": "Validation error", "detail": exc.errors()})
 
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(_request: Request, _exc: Exception):
+    logger.exception("Unhandled exception on %s %s", _request.method, _request.url.path)
     return JSONResponse(
         status_code=500,
         content={"success": False, "error": "Internal server error"},

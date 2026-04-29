@@ -12,7 +12,7 @@ from ollama import Client
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 DEFAULT_PROMPT = "Extract all readable text from this image. Return plain text only."
-DEFAULT_TIMEOUT = 120.0
+DEFAULT_TIMEOUT = 300.0
 
 # Finds occurrences like "_page12" or "-page12" anywhere in the stem
 PAGE_PAT = re.compile(r"(?i)([_-])page(?P<page>\d+)\b")

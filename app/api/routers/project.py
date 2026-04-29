@@ -10,11 +10,13 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.services.logger_service import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
-#DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
-BASE_DIR = Path(__file__).resolve().parent
-DATA_ROOT = BASE_DIR / "data" / "projects"
+DATA_ROOT = Path(__file__).resolve().parents[3] / "app" / "data" / "projects"
 
 # ---- Helpers ----
 
@@ -50,6 +52,7 @@ def read_json(path: Path, default):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        logger.exception("Failed to read JSON: %s", path)
         return default
 
 
@@ -66,11 +69,12 @@ def append_audit(audit_path: Path, entry: dict) -> None:
             if not isinstance(data, list):
                 data = []
         except Exception:
+            logger.exception("Failed to read audit.json: %s", audit_path)
             data = []
         data.append(entry)
         audit_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     except Exception:
-        pass
+        logger.exception("Failed to write audit.json: %s", audit_path)
 
 
 def ensure_project_layout(root: Path) -> None:
@@ -81,6 +85,7 @@ def ensure_project_layout(root: Path) -> None:
 def get_project_root(project_id: str) -> Path:
     root = DATA_ROOT / project_id
     if not root.is_dir():
+        logger.warning("Project not found: project_id=%s", project_id)
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return root
 
@@ -150,6 +155,7 @@ def get_project_root(project_id: str) -> Path:
 @router.post("", status_code=201)
 def create_project(project_id: str):
     if not project_id.strip():
+        logger.warning("Create project rejected — empty project_id")
         raise HTTPException(status_code=400, detail="Project ID is required.")
 
     root = DATA_ROOT / project_id
